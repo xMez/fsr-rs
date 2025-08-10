@@ -1,5 +1,8 @@
+---@type WebSocket?
 local ws = nil
 
+---@param s string
+---@return nil
 local function parseMessage(s)
 	if not ws then
 		return
@@ -18,6 +21,8 @@ local function parseMessage(s)
 	end
 end
 
+---@class ProfileSwitcher
+---@field ScreenSelectMusic ActorFrameTable
 local t = {}
 
 t.ScreenSelectMusic = Def.ActorFrame {
