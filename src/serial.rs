@@ -1,12 +1,39 @@
-use serialport::SerialPort;
+use serialport::SerialPort as ExternalSerialPort;
 use std::f64::consts::PI;
+use std::io::{Read, Write};
 use std::sync::Arc;
-use std::time::Duration;
 use tokio::sync::Mutex;
 
 // Serial communication function
+// A minimal abstraction used by the app: only read/write/flush are required.
+pub trait SensorPort: Send {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize>;
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize>;
+}
+
+// Adapter to wrap a real serialport::SerialPort inside the minimal SensorPort API.
+pub struct SerialPortAdapter {
+    inner: Box<dyn ExternalSerialPort>,
+}
+
+impl SerialPortAdapter {
+    pub fn new(inner: Box<dyn ExternalSerialPort>) -> Self {
+        Self { inner }
+    }
+}
+
+impl SensorPort for SerialPortAdapter {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        Read::read(&mut *self.inner, buf)
+    }
+
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        Write::write(&mut *self.inner, buf)
+    }
+}
+
 pub async fn read_sensor_values(
-    port: &Arc<Mutex<Box<dyn SerialPort>>>,
+    port: &Arc<Mutex<Box<dyn SensorPort>>>,
 ) -> Result<[i32; 4], Box<dyn std::error::Error + Send + Sync>> {
     let mut port_guard = port.lock().await;
     // Send the "v\n" command
@@ -65,7 +92,7 @@ pub async fn read_sensor_values(
 
 // Function to set threshold on serial device
 pub async fn set_threshold(
-    port: &Arc<Mutex<Box<dyn SerialPort>>>,
+    port: &Arc<Mutex<Box<dyn SensorPort>>>,
     threshold_index: usize,
     value: i32,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
@@ -134,7 +161,7 @@ pub async fn set_threshold(
 
 // Function to set all thresholds for a profile on the serial device
 pub async fn set_all_thresholds(
-    port: &Arc<Mutex<Box<dyn SerialPort>>>,
+    port: &Arc<Mutex<Box<dyn SensorPort>>>,
     thresholds: [i32; 4],
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     for (index, &value) in thresholds.iter().enumerate() {
@@ -145,7 +172,7 @@ pub async fn set_all_thresholds(
 
 // Function to read current thresholds from the serial device
 pub async fn get_current_thresholds_from_device(
-    port: &Arc<Mutex<Box<dyn SerialPort>>>,
+    port: &Arc<Mutex<Box<dyn SensorPort>>>,
 ) -> Result<[i32; 4], Box<dyn std::error::Error + Send + Sync>> {
     let mut port_guard = port.lock().await;
 
@@ -206,108 +233,16 @@ pub async fn get_current_thresholds_from_device(
 // Dummy serial port for when the real one is not available
 pub struct DummySerialPort;
 
-impl SerialPort for DummySerialPort {
-    fn name(&self) -> Option<String> {
-        Some("DUMMY".to_string())
+impl SensorPort for DummySerialPort {
+    fn read(&mut self, _buf: &mut [u8]) -> std::io::Result<usize> {
+        Err(std::io::Error::new(
+            std::io::ErrorKind::NotConnected,
+            "Dummy serial port - no data available",
+        ))
     }
 
-    fn baud_rate(&self) -> serialport::Result<u32> {
-        Ok(115200)
-    }
-
-    fn data_bits(&self) -> serialport::Result<serialport::DataBits> {
-        Ok(serialport::DataBits::Eight)
-    }
-
-    fn parity(&self) -> serialport::Result<serialport::Parity> {
-        Ok(serialport::Parity::None)
-    }
-
-    fn stop_bits(&self) -> serialport::Result<serialport::StopBits> {
-        Ok(serialport::StopBits::One)
-    }
-
-    fn flow_control(&self) -> serialport::Result<serialport::FlowControl> {
-        Ok(serialport::FlowControl::None)
-    }
-
-    fn set_baud_rate(&mut self, _baud_rate: u32) -> serialport::Result<()> {
-        Ok(())
-    }
-
-    fn set_data_bits(&mut self, _data_bits: serialport::DataBits) -> serialport::Result<()> {
-        Ok(())
-    }
-
-    fn set_parity(&mut self, _parity: serialport::Parity) -> serialport::Result<()> {
-        Ok(())
-    }
-
-    fn set_stop_bits(&mut self, _stop_bits: serialport::StopBits) -> serialport::Result<()> {
-        Ok(())
-    }
-
-    fn set_flow_control(
-        &mut self,
-        _flow_control: serialport::FlowControl,
-    ) -> serialport::Result<()> {
-        Ok(())
-    }
-
-    fn set_timeout(&mut self, _timeout: Duration) -> serialport::Result<()> {
-        Ok(())
-    }
-
-    fn timeout(&self) -> Duration {
-        Duration::from_millis(100)
-    }
-
-    fn write_request_to_send(&mut self, _level: bool) -> serialport::Result<()> {
-        Ok(())
-    }
-
-    fn write_data_terminal_ready(&mut self, _level: bool) -> serialport::Result<()> {
-        Ok(())
-    }
-
-    fn read_clear_to_send(&mut self) -> serialport::Result<bool> {
-        Ok(false)
-    }
-
-    fn read_data_set_ready(&mut self) -> serialport::Result<bool> {
-        Ok(false)
-    }
-
-    fn read_ring_indicator(&mut self) -> serialport::Result<bool> {
-        Ok(false)
-    }
-
-    fn read_carrier_detect(&mut self) -> serialport::Result<bool> {
-        Ok(false)
-    }
-
-    fn bytes_to_read(&self) -> serialport::Result<u32> {
+    fn write(&mut self, _buf: &[u8]) -> std::io::Result<usize> {
         Ok(0)
-    }
-
-    fn bytes_to_write(&self) -> serialport::Result<u32> {
-        Ok(0)
-    }
-
-    fn clear(&self, _buffer_to_clear: serialport::ClearBuffer) -> serialport::Result<()> {
-        Ok(())
-    }
-
-    fn try_clone(&self) -> serialport::Result<Box<dyn SerialPort>> {
-        Ok(Box::new(DummySerialPort))
-    }
-
-    fn set_break(&self) -> serialport::Result<()> {
-        Ok(())
-    }
-
-    fn clear_break(&self) -> serialport::Result<()> {
-        Ok(())
     }
 }
 
@@ -334,7 +269,6 @@ impl std::io::Write for DummySerialPort {
 pub struct MockSerialPort {
     thresholds: [i32; 4],
     read_buffer: Vec<u8>,
-    timeout: Duration,
     phases: [f64; 4],
     phase_step: f64,
 }
@@ -348,7 +282,6 @@ impl MockSerialPort {
         Self {
             thresholds: initial_thresholds,
             read_buffer: Vec::new(),
-            timeout: Duration::from_millis(100),
             phases,
             phase_step,
         }
@@ -371,115 +304,53 @@ impl MockSerialPort {
     }
 }
 
-impl SerialPort for MockSerialPort {
-    fn name(&self) -> Option<String> {
-        Some("MOCK".to_string())
+impl SensorPort for MockSerialPort {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        if self.read_buffer.is_empty() {
+            // No data queued; simulate non-blocking empty read
+            return Ok(0);
+        }
+        let n = buf.len().min(self.read_buffer.len());
+        let data = self.read_buffer.drain(..n).collect::<Vec<u8>>();
+        buf[..n].copy_from_slice(&data);
+        Ok(n)
     }
 
-    fn baud_rate(&self) -> serialport::Result<u32> {
-        Ok(115200)
-    }
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        let s = std::str::from_utf8(buf).unwrap_or("");
+        let line = s.trim();
 
-    fn data_bits(&self) -> serialport::Result<serialport::DataBits> {
-        Ok(serialport::DataBits::Eight)
-    }
+        if line == "v" {
+            let values = self.generate_sensor_values();
+            self.enqueue_line(format!(
+                "v {} {} {} {}\n",
+                values[0], values[1], values[2], values[3]
+            ));
+        } else if line == "t" {
+            self.enqueue_line(format!(
+                "t {} {} {} {}\n",
+                self.thresholds[0], self.thresholds[1], self.thresholds[2], self.thresholds[3]
+            ));
+        } else {
+            // Expecting: "<index> <value>"
+            let parts: Vec<&str> = line.split_whitespace().collect();
+            if parts.len() == 2 {
+                if let (Ok(idx), Ok(val)) = (parts[0].parse::<usize>(), parts[1].parse::<i32>()) {
+                    if idx < 4 {
+                        self.thresholds[idx] = val;
+                    }
+                    self.enqueue_line(format!(
+                        "t {} {} {} {}\n",
+                        self.thresholds[0],
+                        self.thresholds[1],
+                        self.thresholds[2],
+                        self.thresholds[3]
+                    ));
+                }
+            }
+        }
 
-    fn parity(&self) -> serialport::Result<serialport::Parity> {
-        Ok(serialport::Parity::None)
-    }
-
-    fn stop_bits(&self) -> serialport::Result<serialport::StopBits> {
-        Ok(serialport::StopBits::One)
-    }
-
-    fn flow_control(&self) -> serialport::Result<serialport::FlowControl> {
-        Ok(serialport::FlowControl::None)
-    }
-
-    fn set_baud_rate(&mut self, _baud_rate: u32) -> serialport::Result<()> {
-        Ok(())
-    }
-
-    fn set_data_bits(&mut self, _data_bits: serialport::DataBits) -> serialport::Result<()> {
-        Ok(())
-    }
-
-    fn set_parity(&mut self, _parity: serialport::Parity) -> serialport::Result<()> {
-        Ok(())
-    }
-
-    fn set_stop_bits(&mut self, _stop_bits: serialport::StopBits) -> serialport::Result<()> {
-        Ok(())
-    }
-
-    fn set_flow_control(
-        &mut self,
-        _flow_control: serialport::FlowControl,
-    ) -> serialport::Result<()> {
-        Ok(())
-    }
-
-    fn set_timeout(&mut self, timeout: Duration) -> serialport::Result<()> {
-        self.timeout = timeout;
-        Ok(())
-    }
-
-    fn timeout(&self) -> Duration {
-        self.timeout
-    }
-
-    fn write_request_to_send(&mut self, _level: bool) -> serialport::Result<()> {
-        Ok(())
-    }
-
-    fn write_data_terminal_ready(&mut self, _level: bool) -> serialport::Result<()> {
-        Ok(())
-    }
-
-    fn read_clear_to_send(&mut self) -> serialport::Result<bool> {
-        Ok(false)
-    }
-
-    fn read_data_set_ready(&mut self) -> serialport::Result<bool> {
-        Ok(false)
-    }
-
-    fn read_ring_indicator(&mut self) -> serialport::Result<bool> {
-        Ok(false)
-    }
-
-    fn read_carrier_detect(&mut self) -> serialport::Result<bool> {
-        Ok(false)
-    }
-
-    fn bytes_to_read(&self) -> serialport::Result<u32> {
-        Ok(self.read_buffer.len() as u32)
-    }
-
-    fn bytes_to_write(&self) -> serialport::Result<u32> {
-        Ok(0)
-    }
-
-    fn clear(&self, _buffer_to_clear: serialport::ClearBuffer) -> serialport::Result<()> {
-        Ok(())
-    }
-
-    fn try_clone(&self) -> serialport::Result<Box<dyn SerialPort>> {
-        Ok(Box::new(MockSerialPort {
-            thresholds: self.thresholds,
-            read_buffer: self.read_buffer.clone(),
-            timeout: self.timeout,
-            phases: self.phases,
-            phase_step: self.phase_step,
-        }))
-    }
-
-    fn set_break(&self) -> serialport::Result<()> {
-        Ok(())
-    }
-
-    fn clear_break(&self) -> serialport::Result<()> {
-        Ok(())
+        Ok(buf.len())
     }
 }
 
@@ -536,5 +407,61 @@ impl std::io::Write for MockSerialPort {
 
     fn flush(&mut self) -> std::io::Result<()> {
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn make_mock_port(initial: [i32; 4]) -> Arc<Mutex<Box<dyn SensorPort>>> {
+        Arc::new(Mutex::new(
+            Box::new(MockSerialPort::new(initial)) as Box<dyn SensorPort>
+        ))
+    }
+
+    fn make_dummy_port() -> Arc<Mutex<Box<dyn SensorPort>>> {
+        Arc::new(Mutex::new(Box::new(DummySerialPort) as Box<dyn SensorPort>))
+    }
+
+    #[tokio::test]
+    async fn test_get_current_thresholds_with_mock() {
+        let port = make_mock_port([10, 20, 30, 40]);
+        let thresholds = get_current_thresholds_from_device(&port).await.unwrap();
+        assert_eq!(thresholds, [10, 20, 30, 40]);
+    }
+
+    #[tokio::test]
+    async fn test_set_threshold_with_mock() {
+        let port = make_mock_port([10, 20, 30, 40]);
+        set_threshold(&port, 2, 123).await.unwrap();
+        let thresholds = get_current_thresholds_from_device(&port).await.unwrap();
+        assert_eq!(thresholds[2], 123);
+    }
+
+    #[tokio::test]
+    async fn test_set_all_thresholds_with_mock() {
+        let port = make_mock_port([10, 20, 30, 40]);
+        set_all_thresholds(&port, [1, 2, 3, 4]).await.unwrap();
+        let thresholds = get_current_thresholds_from_device(&port).await.unwrap();
+        assert_eq!(thresholds, [1, 2, 3, 4]);
+    }
+
+    #[tokio::test]
+    async fn test_read_sensor_values_with_mock() {
+        let port = make_mock_port([100, 200, 300, 400]);
+        let values = read_sensor_values(&port).await.unwrap();
+        assert_eq!(values.len(), 4);
+        for v in values {
+            assert!(v >= 0 && v <= 1023);
+        }
+    }
+
+    #[tokio::test]
+    async fn test_dummy_serial_errors() {
+        let port = make_dummy_port();
+        assert!(read_sensor_values(&port).await.is_err());
+        assert!(get_current_thresholds_from_device(&port).await.is_err());
+        assert!(set_threshold(&port, 0, 42).await.is_err());
     }
 }

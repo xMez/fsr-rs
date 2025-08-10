@@ -12,7 +12,7 @@ use futures_util::{sink::SinkExt, stream::StreamExt};
 use profile::{load_profiles, save_profiles, Command, Player, Profile, Profiles, Response};
 use serial::{
     get_current_thresholds_from_device, read_sensor_values, set_all_thresholds, set_threshold,
-    DummySerialPort, MockSerialPort,
+    DummySerialPort, MockSerialPort, SensorPort, SerialPortAdapter,
 };
 
 use std::path::PathBuf;
@@ -23,8 +23,7 @@ use tokio::time::interval;
 use tower_http::cors::CorsLayer;
 use tower_http::services::fs::ServeDir;
 
-// Add serial port dependency
-use serialport::SerialPort;
+// Keep serialport crate for opening the real device
 
 // Add clap for command-line argument parsing
 use clap::Parser;
@@ -55,7 +54,7 @@ struct Args {
 
 // Sensor stream task with control
 async fn sensor_stream_task(
-    serial_port: Arc<Mutex<Box<dyn SerialPort>>>,
+    serial_port: Arc<Mutex<Box<dyn SensorPort>>>,
     tx: Arc<broadcast::Sender<Response>>,
     stream_control: Arc<RwLock<bool>>,
 ) {
@@ -118,7 +117,7 @@ async fn active_player_broadcast_task(
 async fn handle_command(
     command: Command,
     profiles: &mut Profiles,
-    serial_port: &Arc<Mutex<Box<dyn SerialPort>>>,
+    serial_port: &Arc<Mutex<Box<dyn SensorPort>>>,
     stream_control: &Arc<RwLock<bool>>,
 ) -> Response {
     match command {
@@ -548,9 +547,9 @@ async fn main() {
     let args = Args::parse();
 
     // Initialize serial port with error handling or mock
-    let serial_port: Option<Box<dyn SerialPort>> = if args.mock_serial {
+    let serial_port: Option<Box<dyn SensorPort>> = if args.mock_serial {
         println!("Using mock serial device for development");
-        Some(Box::new(MockSerialPort::new([100, 200, 300, 400])) as Box<dyn SerialPort>)
+        Some(Box::new(MockSerialPort::new([100, 200, 300, 400])) as Box<dyn SensorPort>)
     } else {
         match serialport::new(&args.com_port, 115_200)
             .timeout(Duration::from_millis(100))
@@ -558,7 +557,7 @@ async fn main() {
         {
             Ok(port) => {
                 println!("Serial port opened successfully on {}", args.com_port);
-                Some(port)
+                Some(Box::new(SerialPortAdapter::new(port)) as Box<dyn SensorPort>)
             }
             Err(e) => {
                 eprintln!(
@@ -612,7 +611,7 @@ async fn main() {
         Arc::new(Mutex::new(port))
     } else {
         // Create a dummy serial port for when the real one is not available
-        Arc::new(Mutex::new(Box::new(DummySerialPort) as Box<dyn SerialPort>))
+        Arc::new(Mutex::new(Box::new(DummySerialPort) as Box<dyn SensorPort>))
     };
 
     // Set current profile thresholds on the serial device during startup
@@ -712,7 +711,7 @@ async fn ws_handler(
     axum::extract::State(state): axum::extract::State<(
         Arc<RwLock<Profiles>>,
         Arc<broadcast::Sender<Response>>,
-        Arc<Mutex<Box<dyn SerialPort>>>,
+        Arc<Mutex<Box<dyn SensorPort>>>,
         Arc<RwLock<bool>>,
     )>,
 ) -> impl IntoResponse {
@@ -724,7 +723,7 @@ async fn handle_socket(
     (profiles, tx, serial_port, stream_control): (
         Arc<RwLock<Profiles>>,
         Arc<broadcast::Sender<Response>>,
-        Arc<Mutex<Box<dyn SerialPort>>>,
+        Arc<Mutex<Box<dyn SensorPort>>>,
         Arc<RwLock<bool>>,
     ),
 ) {
@@ -857,7 +856,7 @@ mod tests {
         };
 
         // Create a dummy serial port for testing
-        let mock_port = Arc::new(Mutex::new(Box::new(DummySerialPort) as Box<dyn SerialPort>));
+        let mock_port = Arc::new(Mutex::new(Box::new(DummySerialPort) as Box<dyn SensorPort>));
 
         // Create a stream control for testing
         let stream_control = Arc::new(RwLock::new(true)); // Ensure stream is running for this test
@@ -895,7 +894,7 @@ mod tests {
         };
 
         // Create a dummy serial port for testing
-        let mock_port = Arc::new(Mutex::new(Box::new(DummySerialPort) as Box<dyn SerialPort>));
+        let mock_port = Arc::new(Mutex::new(Box::new(DummySerialPort) as Box<dyn SensorPort>));
 
         // Create a stream control for testing
         let stream_control = Arc::new(RwLock::new(true)); // Ensure stream is running for this test
@@ -927,7 +926,7 @@ mod tests {
         };
 
         // Create a dummy serial port for testing
-        let mock_port = Arc::new(Mutex::new(Box::new(DummySerialPort) as Box<dyn SerialPort>));
+        let mock_port = Arc::new(Mutex::new(Box::new(DummySerialPort) as Box<dyn SensorPort>));
 
         // Create a stream control for testing
         let stream_control = Arc::new(RwLock::new(false));
@@ -960,7 +959,7 @@ mod tests {
         };
 
         // Create a dummy serial port for testing
-        let mock_port = Arc::new(Mutex::new(Box::new(DummySerialPort) as Box<dyn SerialPort>));
+        let mock_port = Arc::new(Mutex::new(Box::new(DummySerialPort) as Box<dyn SensorPort>));
 
         // Create a stream control for testing
         let stream_control = Arc::new(RwLock::new(true));
@@ -993,7 +992,7 @@ mod tests {
         };
 
         // Create a dummy serial port for testing
-        let mock_port = Arc::new(Mutex::new(Box::new(DummySerialPort) as Box<dyn SerialPort>));
+        let mock_port = Arc::new(Mutex::new(Box::new(DummySerialPort) as Box<dyn SensorPort>));
 
         // Create a stream control for testing
         let stream_control = Arc::new(RwLock::new(false));
@@ -1047,7 +1046,7 @@ mod tests {
         };
 
         // Create a dummy serial port for testing
-        let mock_port = Arc::new(Mutex::new(Box::new(DummySerialPort) as Box<dyn SerialPort>));
+        let mock_port = Arc::new(Mutex::new(Box::new(DummySerialPort) as Box<dyn SensorPort>));
 
         // Create a stream control for testing
         let stream_control = Arc::new(RwLock::new(false));
@@ -1105,7 +1104,7 @@ mod tests {
         };
 
         // Create a dummy serial port for testing
-        let mock_port = Arc::new(Mutex::new(Box::new(DummySerialPort) as Box<dyn SerialPort>));
+        let mock_port = Arc::new(Mutex::new(Box::new(DummySerialPort) as Box<dyn SensorPort>));
 
         // Create a stream control for testing
         let stream_control = Arc::new(RwLock::new(false));
@@ -1165,7 +1164,7 @@ mod tests {
         };
 
         // Create a dummy serial port for testing
-        let mock_port = Arc::new(Mutex::new(Box::new(DummySerialPort) as Box<dyn SerialPort>));
+        let mock_port = Arc::new(Mutex::new(Box::new(DummySerialPort) as Box<dyn SensorPort>));
 
         // Create a stream control for testing
         let stream_control = Arc::new(RwLock::new(false));
@@ -1216,7 +1215,7 @@ mod tests {
         };
 
         // Create a dummy serial port for testing
-        let mock_port = Arc::new(Mutex::new(Box::new(DummySerialPort) as Box<dyn SerialPort>));
+        let mock_port = Arc::new(Mutex::new(Box::new(DummySerialPort) as Box<dyn SensorPort>));
 
         // Create a stream control for testing
         let stream_control = Arc::new(RwLock::new(false));
