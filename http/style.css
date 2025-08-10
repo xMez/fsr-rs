@@ -1,0 +1,472 @@
+body {
+    font-family: Arial, sans-serif;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    height: 100vh;
+}
+
+.sidebar {
+    width: 300px;
+    background: #f5f5f5;
+    border-right: 1px solid #ddd;
+    padding: 0px;
+    padding-bottom: 60px;
+    overflow-y: auto;
+}
+
+.main-content {
+    flex: 1;
+    padding: 0;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+.container {
+    display: flex;
+    gap: 20px;
+}
+
+.left-panel {
+    flex: 1;
+}
+
+.right-panel {
+    flex: 1;
+}
+
+.panel {
+    border: 1px solid #ccc;
+    padding: 15px;
+    border-radius: 5px;
+}
+
+.profile-item {
+    margin: 0;
+    padding: 12px 20px;
+    background: white;
+    border: none;
+    border-bottom: 1px solid #ddd;
+    transition: all 0.2s ease;
+    position: relative;
+    cursor: pointer;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.current-profile {
+    background: #e0f0ff !important;
+    border-left: 4px solid #007acc;
+    border-bottom: 1px solid #ddd;
+}
+
+.profile-item:not(.current-profile):hover {
+    background: #f8f9fa;
+    transform: none;
+    box-shadow: none;
+}
+
+.profile-name {
+    font-weight: bold;
+    margin-bottom: 4px;
+}
+
+.profile-thresholds {
+    font-size: 12px;
+    color: #666;
+}
+
+.profile-actions {
+    position: absolute;
+    right: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
+
+.profile-item:hover .profile-actions {
+    opacity: 1;
+}
+
+.delete-btn {
+    background: #dc3545;
+    color: white;
+    border: none;
+    border-radius: 3px;
+    padding: 4px 8px;
+    cursor: pointer;
+    font-size: 12px;
+}
+
+.delete-btn:hover {
+    background: #c82333;
+}
+
+.add-profile-input {
+    display: flex;
+    align-items: center;
+    background: #f8f9fa;
+    border: 1px solid #ddd;
+    border-radius: 0;
+    padding: 8px 12px;
+    margin-top: 10px;
+    gap: 8px;
+}
+
+.add-profile-input input {
+    flex: 1;
+    border: none;
+    background: transparent;
+    outline: none;
+    font-size: 14px;
+}
+
+.add-profile-input input::placeholder {
+    color: #999;
+}
+
+.add-profile-btn {
+    background: #28a745;
+    color: white;
+    border: none;
+    border-radius: 0;
+    padding: 6px 10px;
+    cursor: pointer;
+    font-size: 16px;
+    transition: background 0.2s ease;
+    min-width: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.add-profile-btn:hover {
+    background: #218838;
+}
+
+.add-profile-btn:disabled {
+    background: #6c757d;
+    cursor: not-allowed;
+}
+
+.stream-status-bar {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    width: 300px;
+    padding: 12px 0px;
+    color: white;
+    font-weight: bold;
+    font-size: 14px;
+    text-align: center;
+    transition: background-color 0.3s ease;
+    box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.stream-status-bar.active {
+    background-color: #28a745;
+}
+
+.stream-status-bar.inactive {
+    background-color: #dc3545;
+}
+
+.reconnect-btn {
+    background: rgba(255, 255, 255, 0.2);
+    color: white;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    border-radius: 3px;
+    padding: 4px 8px;
+    margin-left: 10px;
+    cursor: pointer;
+    font-size: 12px;
+    transition: background 0.2s ease;
+}
+
+.reconnect-btn:hover {
+    background: rgba(255, 255, 255, 0.3);
+}
+
+.active-player-display {
+    padding: 12px 20px;
+    background: white;
+    border-bottom: 1px solid #ddd;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.active-player-label {
+    font-weight: bold;
+    color: #333;
+}
+
+.active-player-value {
+    font-weight: bold;
+    color: #007acc;
+    padding: 4px 8px;
+    background: #e0f0ff;
+    border-radius: 4px;
+    border: 1px solid #007acc;
+}
+
+.change-player-input {
+    padding: 12px 20px;
+    background: white;
+    border-bottom: 1px solid #ddd;
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.change-player-input input {
+    flex: 1;
+    padding: 8px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 14px;
+}
+
+.change-player-btn {
+    background: #28a745;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    padding: 8px 12px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: background 0.2s ease;
+}
+
+.change-player-btn:hover {
+    background: #218838;
+}
+
+.threshold-input {
+    width: 60px;
+    margin: 0 5px;
+}
+
+input,
+button {
+    margin: 5px;
+    padding: 5px;
+}
+
+button {
+    background: #007acc;
+    color: white;
+    border: none;
+    border-radius: 3px;
+    cursor: pointer;
+}
+
+button:hover {
+    background: #005a9e;
+}
+
+.error {
+    color: red;
+}
+
+.success {
+    color: green;
+}
+
+#messages {
+    height: 300px;
+    border: 1px solid #ccc;
+    overflow-y: scroll;
+    padding: 10px;
+    margin-top: 10px;
+}
+
+/* Hide messages div when not in debug mode */
+body:not(.debug-mode) #messages {
+    display: none;
+}
+
+/* Ensure messages div is visible in debug mode */
+body.debug-mode #messages {
+    display: block;
+}
+
+.threshold-bars {
+    display: flex;
+    gap: 0;
+    margin: 0;
+    justify-content: space-between;
+    padding: 0;
+    height: 100%;
+    width: 100%;
+}
+
+.threshold-column {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    flex: 1;
+    height: 100%;
+    border-right: 2px solid #666;
+    box-sizing: border-box;
+}
+
+.threshold-bar {
+    width: 100%;
+    height: calc(100% - 60px);
+    background: white;
+    border-radius: 0;
+    position: relative;
+    cursor: pointer;
+    box-sizing: border-box;
+}
+
+.sensor-value-bar {
+    position: absolute;
+    bottom: 0;
+    width: 100%;
+    background: linear-gradient(to top, #4CAF50 0%, #8BC34A 100%);
+}
+
+.sensor-value-bar.exceeded {
+    background: linear-gradient(to top, #f44336 0%, #ff5722 100%);
+}
+
+.threshold-line {
+    position: absolute;
+    width: 100%;
+    height: 2px;
+    background-color: #000;
+    cursor: grab;
+    left: 0;
+    transition: background-color 0.2s;
+}
+
+.threshold-bar:hover .threshold-line {
+    background-color: #000;
+    height: 2px;
+}
+
+.threshold-line:active {
+    cursor: grabbing;
+}
+
+.threshold-value {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    background: transparent;
+    color: #000;
+    padding: 0;
+    border-radius: 0;
+    font-size: 18px;
+    font-weight: bold;
+    white-space: nowrap;
+    text-align: left;
+    z-index: 5;
+}
+
+.threshold-label {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    font-size: 18px;
+    font-weight: bold;
+    color: #000;
+    text-align: center;
+    padding: 0;
+    border-bottom: 2px solid #666;
+}
+
+.control-buttons {
+    display: flex;
+    justify-content: space-between;
+    gap: 0;
+    margin-top: 0;
+    width: 100%;
+    height: 60px;
+}
+
+.plus-minus-btn {
+    background: white;
+    color: #000;
+    border-radius: 0;
+    width: 50%;
+    height: 100%;
+    font-size: 18px;
+    padding: 0;
+    margin: 0;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.2s ease;
+    box-sizing: border-box;
+}
+
+.plus-minus-btn:hover {
+    background: #f0f0f0;
+}
+
+.cursor-line {
+    position: absolute;
+    width: 100%;
+    height: 1px;
+    background-color: rgba(255, 107, 53, 0.8);
+    pointer-events: none;
+    left: 0;
+    z-index: 10;
+    display: none;
+    box-shadow: 0 0 2px rgba(255, 107, 53, 0.5);
+}
+
+.cursor-value {
+    position: absolute;
+    right: 5px;
+    background: rgba(0, 0, 0, 0.8);
+    color: white;
+    padding: 2px 6px;
+    border-radius: 0;
+    font-size: 12px;
+    font-weight: bold;
+    white-space: nowrap;
+    transform: translateY(-50%);
+    z-index: 15;
+    display: none;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+.stream-status {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    margin-right: 8px;
+    animation: pulse 2s infinite;
+}
+
+.stream-status.active {
+    background-color: #28a745;
+}
+
+.stream-status.inactive {
+    background-color: #dc3545;
+}
+
+@keyframes pulse {
+    0% {
+        opacity: 1;
+    }
+
+    50% {
+        opacity: 0.5;
+    }
+
+    100% {
+        opacity: 1;
+    }
+}
