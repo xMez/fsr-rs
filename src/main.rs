@@ -784,6 +784,77 @@ mod tests {
     use super::*;
     use std::collections::HashMap;
 
+    // --- Test helpers to reduce repetition ---
+    fn make_profiles_single(name: &str, thresholds: [i32; 4]) -> Profiles {
+        Profiles {
+            profiles: HashMap::from([(name.to_string(), Profile { thresholds })]),
+            current_profile: name.to_string(),
+            default_profile: name.to_string(),
+            players: HashMap::new(),
+            current_player: String::new(),
+        }
+    }
+
+    fn make_profiles_two(
+        name1: &str,
+        thresholds1: [i32; 4],
+        name2: &str,
+        thresholds2: [i32; 4],
+        current: &str,
+        default_: &str,
+    ) -> Profiles {
+        Profiles {
+            profiles: HashMap::from([
+                (
+                    name1.to_string(),
+                    Profile {
+                        thresholds: thresholds1,
+                    },
+                ),
+                (
+                    name2.to_string(),
+                    Profile {
+                        thresholds: thresholds2,
+                    },
+                ),
+            ]),
+            current_profile: current.to_string(),
+            default_profile: default_.to_string(),
+            players: HashMap::new(),
+            current_player: String::new(),
+        }
+    }
+
+    fn make_profiles_empty() -> Profiles {
+        Profiles {
+            profiles: HashMap::new(),
+            current_profile: String::new(),
+            default_profile: String::new(),
+            players: HashMap::new(),
+            current_player: String::new(),
+        }
+    }
+
+    fn with_current_player(mut profiles: Profiles, name: &str, player_profile: &str) -> Profiles {
+        profiles.players.insert(
+            name.to_string(),
+            Player {
+                name: name.to_string(),
+                profile: player_profile.to_string(),
+            },
+        );
+        profiles.current_player = name.to_string();
+        profiles
+    }
+
+    fn make_dummy_port() -> Arc<Mutex<Box<dyn SensorPort>>> {
+        Arc::new(Mutex::new(Box::new(DummySerialPort) as Box<dyn SensorPort>))
+    }
+
+    fn make_stream_control(initial: bool) -> Arc<RwLock<bool>> {
+        Arc::new(RwLock::new(initial))
+    }
+
     #[tokio::test]
     async fn test_broadcast_channel() {
         let (tx, mut rx) = broadcast::channel::<Response>(10);
@@ -834,32 +905,17 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_current_thresholds() {
-        let mut profiles = Profiles {
-            profiles: HashMap::from([
-                (
-                    "Profile1".to_string(),
-                    Profile {
-                        thresholds: [10, 20, 30, 40],
-                    },
-                ),
-                (
-                    "Profile2".to_string(),
-                    Profile {
-                        thresholds: [50, 60, 70, 80],
-                    },
-                ),
-            ]),
-            current_profile: "Profile1".to_string(),
-            default_profile: "Profile1".to_string(),
-            players: HashMap::new(),
-            current_player: String::new(),
-        };
+        let mut profiles = make_profiles_two(
+            "Profile1",
+            [10, 20, 30, 40],
+            "Profile2",
+            [50, 60, 70, 80],
+            "Profile1",
+            "Profile1",
+        );
 
-        // Create a dummy serial port for testing
-        let mock_port = Arc::new(Mutex::new(Box::new(DummySerialPort) as Box<dyn SensorPort>));
-
-        // Create a stream control for testing
-        let stream_control = Arc::new(RwLock::new(true)); // Ensure stream is running for this test
+        let mock_port = make_dummy_port();
+        let stream_control = make_stream_control(true);
 
         let response = handle_command(
             Command::GetCurrentThresholds,
@@ -885,19 +941,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_current_thresholds_no_profile() {
-        let mut profiles = Profiles {
-            profiles: HashMap::new(),
-            current_profile: String::new(),
-            default_profile: String::new(),
-            players: HashMap::new(),
-            current_player: String::new(),
-        };
-
-        // Create a dummy serial port for testing
-        let mock_port = Arc::new(Mutex::new(Box::new(DummySerialPort) as Box<dyn SensorPort>));
-
-        // Create a stream control for testing
-        let stream_control = Arc::new(RwLock::new(true)); // Ensure stream is running for this test
+        let mut profiles = make_profiles_empty();
+        let mock_port = make_dummy_port();
+        let stream_control = make_stream_control(true);
 
         let response = handle_command(
             Command::GetCurrentThresholds,
@@ -912,24 +958,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_start_sensor_stream() {
-        let mut profiles = Profiles {
-            profiles: HashMap::from([(
-                "Profile1".to_string(),
-                Profile {
-                    thresholds: [10, 20, 30, 40],
-                },
-            )]),
-            current_profile: "Profile1".to_string(),
-            default_profile: "Profile1".to_string(),
-            players: HashMap::new(),
-            current_player: String::new(),
-        };
-
-        // Create a dummy serial port for testing
-        let mock_port = Arc::new(Mutex::new(Box::new(DummySerialPort) as Box<dyn SensorPort>));
-
-        // Create a stream control for testing
-        let stream_control = Arc::new(RwLock::new(false));
+        let mut profiles = make_profiles_single("Profile1", [10, 20, 30, 40]);
+        let mock_port = make_dummy_port();
+        let stream_control = make_stream_control(false);
 
         let response = handle_command(
             Command::StartSensorStream,
@@ -945,24 +976,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_stop_sensor_stream() {
-        let mut profiles = Profiles {
-            profiles: HashMap::from([(
-                "Profile1".to_string(),
-                Profile {
-                    thresholds: [10, 20, 30, 40],
-                },
-            )]),
-            current_profile: "Profile1".to_string(),
-            default_profile: "Profile1".to_string(),
-            players: HashMap::new(),
-            current_player: String::new(),
-        };
-
-        // Create a dummy serial port for testing
-        let mock_port = Arc::new(Mutex::new(Box::new(DummySerialPort) as Box<dyn SensorPort>));
-
-        // Create a stream control for testing
-        let stream_control = Arc::new(RwLock::new(true));
+        let mut profiles = make_profiles_single("Profile1", [10, 20, 30, 40]);
+        let mock_port = make_dummy_port();
+        let stream_control = make_stream_control(true);
 
         let response = handle_command(
             Command::StopSensorStream,
@@ -978,24 +994,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_update_threshold_with_serial() {
-        let mut profiles = Profiles {
-            profiles: HashMap::from([(
-                "Profile1".to_string(),
-                Profile {
-                    thresholds: [10, 20, 30, 40],
-                },
-            )]),
-            current_profile: "Profile1".to_string(),
-            default_profile: "Profile1".to_string(),
-            players: HashMap::new(),
-            current_player: String::new(),
-        };
-
-        // Create a dummy serial port for testing
-        let mock_port = Arc::new(Mutex::new(Box::new(DummySerialPort) as Box<dyn SensorPort>));
-
-        // Create a stream control for testing
-        let stream_control = Arc::new(RwLock::new(false));
+        let mut profiles = make_profiles_single("Profile1", [10, 20, 30, 40]);
+        let mock_port = make_dummy_port();
+        let stream_control = make_stream_control(false);
 
         let response = handle_command(
             Command::UpdateThreshold {
@@ -1024,32 +1025,16 @@ mod tests {
 
     #[tokio::test]
     async fn test_change_profile_with_serial() {
-        let mut profiles = Profiles {
-            profiles: HashMap::from([
-                (
-                    "Profile1".to_string(),
-                    Profile {
-                        thresholds: [10, 20, 30, 40],
-                    },
-                ),
-                (
-                    "Profile2".to_string(),
-                    Profile {
-                        thresholds: [50, 60, 70, 80],
-                    },
-                ),
-            ]),
-            current_profile: "Profile1".to_string(),
-            default_profile: "Profile1".to_string(),
-            players: HashMap::new(),
-            current_player: String::new(),
-        };
-
-        // Create a dummy serial port for testing
-        let mock_port = Arc::new(Mutex::new(Box::new(DummySerialPort) as Box<dyn SensorPort>));
-
-        // Create a stream control for testing
-        let stream_control = Arc::new(RwLock::new(false));
+        let mut profiles = make_profiles_two(
+            "Profile1",
+            [10, 20, 30, 40],
+            "Profile2",
+            [50, 60, 70, 80],
+            "Profile1",
+            "Profile1",
+        );
+        let mock_port = make_dummy_port();
+        let stream_control = make_stream_control(false);
 
         let response = handle_command(
             Command::ChangeProfile {
@@ -1076,38 +1061,17 @@ mod tests {
 
     #[tokio::test]
     async fn test_change_profile_with_current_player() {
-        let mut profiles = Profiles {
-            profiles: HashMap::from([
-                (
-                    "Profile1".to_string(),
-                    Profile {
-                        thresholds: [10, 20, 30, 40],
-                    },
-                ),
-                (
-                    "Profile2".to_string(),
-                    Profile {
-                        thresholds: [50, 60, 70, 80],
-                    },
-                ),
-            ]),
-            current_profile: "Profile1".to_string(),
-            default_profile: "Profile1".to_string(),
-            players: HashMap::from([(
-                "Player1".to_string(),
-                Player {
-                    name: "Player1".to_string(),
-                    profile: "Profile1".to_string(),
-                },
-            )]),
-            current_player: "Player1".to_string(),
-        };
-
-        // Create a dummy serial port for testing
-        let mock_port = Arc::new(Mutex::new(Box::new(DummySerialPort) as Box<dyn SensorPort>));
-
-        // Create a stream control for testing
-        let stream_control = Arc::new(RwLock::new(false));
+        let profiles_base = make_profiles_two(
+            "Profile1",
+            [10, 20, 30, 40],
+            "Profile2",
+            [50, 60, 70, 80],
+            "Profile1",
+            "Profile1",
+        );
+        let mut profiles = with_current_player(profiles_base, "Player1", "Profile1");
+        let mock_port = make_dummy_port();
+        let stream_control = make_stream_control(false);
 
         let response = handle_command(
             Command::ChangeProfile {
@@ -1150,24 +1114,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_current_thresholds_with_device_sync() {
-        let mut profiles = Profiles {
-            profiles: HashMap::from([(
-                "Profile1".to_string(),
-                Profile {
-                    thresholds: [10, 20, 30, 40],
-                },
-            )]),
-            current_profile: "Profile1".to_string(),
-            default_profile: "Profile1".to_string(),
-            players: HashMap::new(),
-            current_player: String::new(),
-        };
-
-        // Create a dummy serial port for testing
-        let mock_port = Arc::new(Mutex::new(Box::new(DummySerialPort) as Box<dyn SensorPort>));
-
-        // Create a stream control for testing
-        let stream_control = Arc::new(RwLock::new(false));
+        let mut profiles = make_profiles_single("Profile1", [10, 20, 30, 40]);
+        let mock_port = make_dummy_port();
+        let stream_control = make_stream_control(false);
 
         let response = handle_command(
             Command::GetCurrentThresholds,
@@ -1193,32 +1142,16 @@ mod tests {
 
     #[tokio::test]
     async fn test_change_player() {
-        let mut profiles = Profiles {
-            profiles: HashMap::from([
-                (
-                    "Profile1".to_string(),
-                    Profile {
-                        thresholds: [10, 20, 30, 40],
-                    },
-                ),
-                (
-                    "Profile2".to_string(),
-                    Profile {
-                        thresholds: [50, 60, 70, 80],
-                    },
-                ),
-            ]),
-            current_profile: "Profile1".to_string(),
-            default_profile: "Profile1".to_string(),
-            players: HashMap::new(),
-            current_player: String::new(),
-        };
-
-        // Create a dummy serial port for testing
-        let mock_port = Arc::new(Mutex::new(Box::new(DummySerialPort) as Box<dyn SensorPort>));
-
-        // Create a stream control for testing
-        let stream_control = Arc::new(RwLock::new(false));
+        let mut profiles = make_profiles_two(
+            "Profile1",
+            [10, 20, 30, 40],
+            "Profile2",
+            [50, 60, 70, 80],
+            "Profile1",
+            "Profile1",
+        );
+        let mock_port = make_dummy_port();
+        let stream_control = make_stream_control(false);
 
         // Test creating a new player
         let response = handle_command(
@@ -1266,41 +1199,32 @@ mod tests {
 
     #[tokio::test]
     async fn test_active_player_broadcast() {
-        let profiles = Arc::new(RwLock::new(Profiles {
-            profiles: HashMap::from([
-                (
-                    "Profile1".to_string(),
-                    Profile {
-                        thresholds: [10, 20, 30, 40],
-                    },
-                ),
-                (
-                    "Profile2".to_string(),
-                    Profile {
-                        thresholds: [50, 60, 70, 80],
-                    },
-                ),
-            ]),
-            current_profile: "Profile1".to_string(),
-            default_profile: "Profile1".to_string(),
-            players: HashMap::from([
-                (
-                    "Player1".to_string(),
-                    Player {
-                        name: "Player1".to_string(),
-                        profile: "Profile1".to_string(),
-                    },
-                ),
-                (
-                    "Player2".to_string(),
-                    Player {
-                        name: "Player2".to_string(),
-                        profile: "Profile2".to_string(),
-                    },
-                ),
-            ]),
-            current_player: "Player1".to_string(),
-        }));
+        let mut base_profiles = make_profiles_two(
+            "Profile1",
+            [10, 20, 30, 40],
+            "Profile2",
+            [50, 60, 70, 80],
+            "Profile1",
+            "Profile1",
+        );
+        base_profiles.players = HashMap::from([
+            (
+                "Player1".to_string(),
+                Player {
+                    name: "Player1".to_string(),
+                    profile: "Profile1".to_string(),
+                },
+            ),
+            (
+                "Player2".to_string(),
+                Player {
+                    name: "Player2".to_string(),
+                    profile: "Profile2".to_string(),
+                },
+            ),
+        ]);
+        base_profiles.current_player = "Player1".to_string();
+        let profiles = Arc::new(RwLock::new(base_profiles));
 
         let (tx, mut rx) = broadcast::channel::<Response>(10);
         let tx = Arc::new(tx);

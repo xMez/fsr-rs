@@ -92,12 +92,83 @@ pub async fn save_profiles(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::HashMap;
+
+    // --- Test helpers ---
+    fn make_profile(thresholds: [i32; 4]) -> Profile {
+        Profile { thresholds }
+    }
+
+    fn make_profiles_single(
+        name: &str,
+        thresholds: [i32; 4],
+        current: &str,
+        default_: &str,
+    ) -> Profiles {
+        Profiles {
+            profiles: HashMap::from([(name.to_string(), Profile { thresholds })]),
+            current_profile: current.to_string(),
+            default_profile: default_.to_string(),
+            players: HashMap::new(),
+            current_player: String::new(),
+        }
+    }
+
+    fn make_profiles_two(
+        name1: &str,
+        thresholds1: [i32; 4],
+        name2: &str,
+        thresholds2: [i32; 4],
+        current: &str,
+        default_: &str,
+    ) -> Profiles {
+        Profiles {
+            profiles: HashMap::from([
+                (
+                    name1.to_string(),
+                    Profile {
+                        thresholds: thresholds1,
+                    },
+                ),
+                (
+                    name2.to_string(),
+                    Profile {
+                        thresholds: thresholds2,
+                    },
+                ),
+            ]),
+            current_profile: current.to_string(),
+            default_profile: default_.to_string(),
+            players: HashMap::new(),
+            current_player: String::new(),
+        }
+    }
+
+    fn make_player(name: &str, profile: &str) -> Player {
+        Player {
+            name: name.to_string(),
+            profile: profile.to_string(),
+        }
+    }
+
+    fn set_players(
+        mut profiles: Profiles,
+        players: Vec<Player>,
+        current_player: Option<&str>,
+    ) -> Profiles {
+        profiles.players = players
+            .into_iter()
+            .map(|p| (p.name.clone(), p))
+            .collect::<HashMap<_, _>>();
+        if let Some(name) = current_player {
+            profiles.current_player = name.to_string();
+        }
+        profiles
+    }
 
     #[test]
     fn test_profile_serialization() {
-        let profile = Profile {
-            thresholds: [100, 200, 300, 400],
-        };
+        let profile = make_profile([100, 200, 300, 400]);
 
         let json = serde_json::to_string(&profile).unwrap();
         let deserialized: Profile = serde_json::from_str(&json).unwrap();
@@ -108,18 +179,7 @@ mod tests {
 
     #[test]
     fn test_profiles_serialization() {
-        let profiles = Profiles {
-            profiles: HashMap::from([(
-                "Profile1".to_string(),
-                Profile {
-                    thresholds: [10, 20, 30, 40],
-                },
-            )]),
-            current_profile: "Profile1".to_string(),
-            default_profile: String::new(),
-            players: HashMap::new(),
-            current_player: String::new(),
-        };
+        let profiles = make_profiles_single("Profile1", [10, 20, 30, 40], "Profile1", "");
 
         let json = serde_json::to_string_pretty(&profiles).unwrap();
         let deserialized: Profiles = serde_json::from_str(&json).unwrap();
@@ -148,18 +208,12 @@ mod tests {
         let response = Response {
             success: true,
             message: "Success".to_string(),
-            data: Some(Profiles {
-                profiles: HashMap::from([(
-                    "Profile1".to_string(),
-                    Profile {
-                        thresholds: [10, 20, 30, 40],
-                    },
-                )]),
-                current_profile: "Profile1".to_string(),
-                default_profile: String::new(),
-                players: HashMap::new(),
-                current_player: String::new(),
-            }),
+            data: Some(make_profiles_single(
+                "Profile1",
+                [10, 20, 30, 40],
+                "Profile1",
+                "",
+            )),
             sensor_values: None,
             response_type: Some("command_response".to_string()),
         };
@@ -172,44 +226,9 @@ mod tests {
 
     #[test]
     fn test_profiles_equality() {
-        let profiles1 = Profiles {
-            profiles: HashMap::from([(
-                "Profile1".to_string(),
-                Profile {
-                    thresholds: [10, 20, 30, 40],
-                },
-            )]),
-            current_profile: "Profile1".to_string(),
-            default_profile: String::new(),
-            players: HashMap::new(),
-            current_player: String::new(),
-        };
-
-        let profiles2 = Profiles {
-            profiles: HashMap::from([(
-                "Profile1".to_string(),
-                Profile {
-                    thresholds: [10, 20, 30, 40],
-                },
-            )]),
-            current_profile: "Profile1".to_string(),
-            default_profile: String::new(),
-            players: HashMap::new(),
-            current_player: String::new(),
-        };
-
-        let profiles3 = Profiles {
-            profiles: HashMap::from([(
-                "Profile2".to_string(),
-                Profile {
-                    thresholds: [10, 20, 30, 40],
-                },
-            )]),
-            current_profile: "Profile1".to_string(),
-            default_profile: String::new(),
-            players: HashMap::new(),
-            current_player: String::new(),
-        };
+        let profiles1 = make_profiles_single("Profile1", [10, 20, 30, 40], "Profile1", "");
+        let profiles2 = make_profiles_single("Profile1", [10, 20, 30, 40], "Profile1", "");
+        let profiles3 = make_profiles_single("Profile2", [10, 20, 30, 40], "Profile1", "");
 
         assert_eq!(profiles1, profiles2);
         assert_ne!(profiles1, profiles3);
@@ -217,9 +236,7 @@ mod tests {
 
     #[test]
     fn test_profile_debug() {
-        let profile = Profile {
-            thresholds: [100, 200, 300, 400],
-        };
+        let profile = make_profile([100, 200, 300, 400]);
 
         let debug_str = format!("{:?}", profile);
         assert!(debug_str.contains("100"));
@@ -230,18 +247,7 @@ mod tests {
 
     #[test]
     fn test_profiles_debug() {
-        let profiles = Profiles {
-            profiles: HashMap::from([(
-                "Profile1".to_string(),
-                Profile {
-                    thresholds: [10, 20, 30, 40],
-                },
-            )]),
-            current_profile: "Profile1".to_string(),
-            default_profile: String::new(),
-            players: HashMap::new(),
-            current_player: String::new(),
-        };
+        let profiles = make_profiles_single("Profile1", [10, 20, 30, 40], "Profile1", "");
 
         let debug_str = format!("{:?}", profiles);
         assert!(debug_str.contains("Profile1"));
@@ -278,18 +284,12 @@ mod tests {
         let response = Response {
             success: true,
             message: "Success".to_string(),
-            data: Some(Profiles {
-                profiles: HashMap::from([(
-                    "Profile1".to_string(),
-                    Profile {
-                        thresholds: [10, 20, 30, 40],
-                    },
-                )]),
-                current_profile: "Profile1".to_string(),
-                default_profile: String::new(),
-                players: HashMap::new(),
-                current_player: String::new(),
-            }),
+            data: Some(make_profiles_single(
+                "Profile1",
+                [10, 20, 30, 40],
+                "Profile1",
+                "",
+            )),
             sensor_values: None,
             response_type: Some("command_response".to_string()),
         };
@@ -305,18 +305,7 @@ mod tests {
 
     #[test]
     fn test_profiles_clone() {
-        let original = Profiles {
-            profiles: HashMap::from([(
-                "Profile1".to_string(),
-                Profile {
-                    thresholds: [10, 20, 30, 40],
-                },
-            )]),
-            current_profile: "Profile1".to_string(),
-            default_profile: String::new(),
-            players: HashMap::new(),
-            current_player: String::new(),
-        };
+        let original = make_profiles_single("Profile1", [10, 20, 30, 40], "Profile1", "");
 
         let cloned = original.clone();
         assert_eq!(original, cloned);
@@ -326,9 +315,7 @@ mod tests {
 
     #[test]
     fn test_profile_clone() {
-        let original = Profile {
-            thresholds: [100, 200, 300, 400],
-        };
+        let original = make_profile([100, 200, 300, 400]);
 
         let cloned = original.clone();
         assert_eq!(original, cloned);
@@ -456,41 +443,22 @@ mod tests {
 
     #[test]
     fn test_profiles_with_players() {
-        let profiles = Profiles {
-            profiles: HashMap::from([
-                (
-                    "Profile1".to_string(),
-                    Profile {
-                        thresholds: [10, 20, 30, 40],
-                    },
-                ),
-                (
-                    "Profile2".to_string(),
-                    Profile {
-                        thresholds: [50, 60, 70, 80],
-                    },
-                ),
-            ]),
-            current_profile: "Profile1".to_string(),
-            default_profile: String::new(),
-            players: HashMap::from([
-                (
-                    "Player1".to_string(),
-                    Player {
-                        name: "Player1".to_string(),
-                        profile: "Profile1".to_string(),
-                    },
-                ),
-                (
-                    "Player2".to_string(),
-                    Player {
-                        name: "Player2".to_string(),
-                        profile: "Profile2".to_string(),
-                    },
-                ),
-            ]),
-            current_player: "Player1".to_string(),
-        };
+        let profiles_base = make_profiles_two(
+            "Profile1",
+            [10, 20, 30, 40],
+            "Profile2",
+            [50, 60, 70, 80],
+            "Profile1",
+            "",
+        );
+        let profiles = set_players(
+            profiles_base,
+            vec![
+                make_player("Player1", "Profile1"),
+                make_player("Player2", "Profile2"),
+            ],
+            Some("Player1"),
+        );
 
         let json = serde_json::to_string_pretty(&profiles).unwrap();
         let deserialized: Profiles = serde_json::from_str(&json).unwrap();
