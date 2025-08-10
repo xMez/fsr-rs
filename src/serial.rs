@@ -1,4 +1,5 @@
 use serialport::SerialPort;
+use std::f64::consts::PI;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::Mutex;
@@ -322,6 +323,215 @@ impl std::io::Read for DummySerialPort {
 impl std::io::Write for DummySerialPort {
     fn write(&mut self, _buf: &[u8]) -> std::io::Result<usize> {
         Ok(0) // Pretend we wrote everything
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+// Mock serial port that simulates a real device for development
+pub struct MockSerialPort {
+    thresholds: [i32; 4],
+    read_buffer: Vec<u8>,
+    timeout: Duration,
+    phases: [f64; 4],
+    phase_step: f64,
+}
+
+impl MockSerialPort {
+    pub fn new(initial_thresholds: [i32; 4]) -> Self {
+        // Phase offsets to differentiate channels
+        let phases = [0.0, PI * 0.5, PI, PI * 1.5];
+        // Roughly 0.2 Hz at ~60Hz polling → period ~5s
+        let phase_step = 2.0 * PI * 0.2 / 60.0;
+        Self {
+            thresholds: initial_thresholds,
+            read_buffer: Vec::new(),
+            timeout: Duration::from_millis(100),
+            phases,
+            phase_step,
+        }
+    }
+
+    fn generate_sensor_values(&mut self) -> [i32; 4] {
+        let mut values = [0i32; 4];
+        for i in 0..4 {
+            // Update phase and wrap around 2π
+            self.phases[i] = (self.phases[i] + self.phase_step) % (2.0 * PI);
+            let s = self.phases[i].sin(); // -1..1
+            let v = ((s + 1.0) * 0.5 * 1023.0).round() as i32; // 0..1023
+            values[i] = v;
+        }
+        values
+    }
+
+    fn enqueue_line(&mut self, line: String) {
+        self.read_buffer.extend_from_slice(line.as_bytes());
+    }
+}
+
+impl SerialPort for MockSerialPort {
+    fn name(&self) -> Option<String> {
+        Some("MOCK".to_string())
+    }
+
+    fn baud_rate(&self) -> serialport::Result<u32> {
+        Ok(115200)
+    }
+
+    fn data_bits(&self) -> serialport::Result<serialport::DataBits> {
+        Ok(serialport::DataBits::Eight)
+    }
+
+    fn parity(&self) -> serialport::Result<serialport::Parity> {
+        Ok(serialport::Parity::None)
+    }
+
+    fn stop_bits(&self) -> serialport::Result<serialport::StopBits> {
+        Ok(serialport::StopBits::One)
+    }
+
+    fn flow_control(&self) -> serialport::Result<serialport::FlowControl> {
+        Ok(serialport::FlowControl::None)
+    }
+
+    fn set_baud_rate(&mut self, _baud_rate: u32) -> serialport::Result<()> {
+        Ok(())
+    }
+
+    fn set_data_bits(&mut self, _data_bits: serialport::DataBits) -> serialport::Result<()> {
+        Ok(())
+    }
+
+    fn set_parity(&mut self, _parity: serialport::Parity) -> serialport::Result<()> {
+        Ok(())
+    }
+
+    fn set_stop_bits(&mut self, _stop_bits: serialport::StopBits) -> serialport::Result<()> {
+        Ok(())
+    }
+
+    fn set_flow_control(
+        &mut self,
+        _flow_control: serialport::FlowControl,
+    ) -> serialport::Result<()> {
+        Ok(())
+    }
+
+    fn set_timeout(&mut self, timeout: Duration) -> serialport::Result<()> {
+        self.timeout = timeout;
+        Ok(())
+    }
+
+    fn timeout(&self) -> Duration {
+        self.timeout
+    }
+
+    fn write_request_to_send(&mut self, _level: bool) -> serialport::Result<()> {
+        Ok(())
+    }
+
+    fn write_data_terminal_ready(&mut self, _level: bool) -> serialport::Result<()> {
+        Ok(())
+    }
+
+    fn read_clear_to_send(&mut self) -> serialport::Result<bool> {
+        Ok(false)
+    }
+
+    fn read_data_set_ready(&mut self) -> serialport::Result<bool> {
+        Ok(false)
+    }
+
+    fn read_ring_indicator(&mut self) -> serialport::Result<bool> {
+        Ok(false)
+    }
+
+    fn read_carrier_detect(&mut self) -> serialport::Result<bool> {
+        Ok(false)
+    }
+
+    fn bytes_to_read(&self) -> serialport::Result<u32> {
+        Ok(self.read_buffer.len() as u32)
+    }
+
+    fn bytes_to_write(&self) -> serialport::Result<u32> {
+        Ok(0)
+    }
+
+    fn clear(&self, _buffer_to_clear: serialport::ClearBuffer) -> serialport::Result<()> {
+        Ok(())
+    }
+
+    fn try_clone(&self) -> serialport::Result<Box<dyn SerialPort>> {
+        Ok(Box::new(MockSerialPort {
+            thresholds: self.thresholds,
+            read_buffer: self.read_buffer.clone(),
+            timeout: self.timeout,
+            phases: self.phases,
+            phase_step: self.phase_step,
+        }))
+    }
+
+    fn set_break(&self) -> serialport::Result<()> {
+        Ok(())
+    }
+
+    fn clear_break(&self) -> serialport::Result<()> {
+        Ok(())
+    }
+}
+
+impl std::io::Read for MockSerialPort {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        if self.read_buffer.is_empty() {
+            // No data queued; simulate non-blocking empty read
+            return Ok(0);
+        }
+        let n = buf.len().min(self.read_buffer.len());
+        let data = self.read_buffer.drain(..n).collect::<Vec<u8>>();
+        buf[..n].copy_from_slice(&data);
+        Ok(n)
+    }
+}
+
+impl std::io::Write for MockSerialPort {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        let s = std::str::from_utf8(buf).unwrap_or("");
+        let line = s.trim();
+
+        if line == "v" {
+            let values = self.generate_sensor_values();
+            self.enqueue_line(format!(
+                "v {} {} {} {}\n",
+                values[0], values[1], values[2], values[3]
+            ));
+        } else if line == "t" {
+            self.enqueue_line(format!(
+                "t {} {} {} {}\n",
+                self.thresholds[0], self.thresholds[1], self.thresholds[2], self.thresholds[3]
+            ));
+        } else {
+            // Expecting: "<index> <value>"
+            let parts: Vec<&str> = line.split_whitespace().collect();
+            if parts.len() == 2 {
+                if let (Ok(idx), Ok(val)) = (parts[0].parse::<usize>(), parts[1].parse::<i32>()) {
+                    if idx < 4 {
+                        self.thresholds[idx] = val;
+                    }
+                    self.enqueue_line(format!(
+                        "t {} {} {} {}\n",
+                        self.thresholds[0],
+                        self.thresholds[1],
+                        self.thresholds[2],
+                        self.thresholds[3]
+                    ));
+                }
+            }
+        }
+
+        Ok(buf.len())
     }
 
     fn flush(&mut self) -> std::io::Result<()> {

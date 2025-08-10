@@ -12,7 +12,7 @@ use futures_util::{sink::SinkExt, stream::StreamExt};
 use profile::{load_profiles, save_profiles, Command, Player, Profile, Profiles, Response};
 use serial::{
     get_current_thresholds_from_device, read_sensor_values, set_all_thresholds, set_threshold,
-    DummySerialPort,
+    DummySerialPort, MockSerialPort,
 };
 
 use std::path::PathBuf;
@@ -47,6 +47,10 @@ struct Args {
     /// Default profile to use for new players
     #[arg(long)]
     default_profile: Option<String>,
+
+    /// Use a mock serial device for development (no hardware required)
+    #[arg(long, default_value_t = false)]
+    mock_serial: bool,
 }
 
 // Sensor stream task with control
@@ -543,22 +547,27 @@ async fn main() {
     // Parse command line arguments
     let args = Args::parse();
 
-    // Initialize serial port with error handling
-    let serial_port = match serialport::new(&args.com_port, 115_200)
-        .timeout(Duration::from_millis(100))
-        .open()
-    {
-        Ok(port) => {
-            println!("Serial port opened successfully on {}", args.com_port);
-            Some(port)
-        }
-        Err(e) => {
-            eprintln!(
-                "Warning: Failed to open serial port {}: {}",
-                args.com_port, e
-            );
-            eprintln!("Server will start without sensor functionality");
-            None
+    // Initialize serial port with error handling or mock
+    let serial_port: Option<Box<dyn SerialPort>> = if args.mock_serial {
+        println!("Using mock serial device for development");
+        Some(Box::new(MockSerialPort::new([100, 200, 300, 400])) as Box<dyn SerialPort>)
+    } else {
+        match serialport::new(&args.com_port, 115_200)
+            .timeout(Duration::from_millis(100))
+            .open()
+        {
+            Ok(port) => {
+                println!("Serial port opened successfully on {}", args.com_port);
+                Some(port)
+            }
+            Err(e) => {
+                eprintln!(
+                    "Warning: Failed to open serial port {}: {}",
+                    args.com_port, e
+                );
+                eprintln!("Server will start without sensor functionality");
+                None
+            }
         }
     };
 
