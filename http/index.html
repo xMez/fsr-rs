@@ -3,8 +3,22 @@
 
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport"
+        content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content, maximum-scale=1, user-scalable=no">
     <title>Profile Manager</title>
     <link rel="stylesheet" href="style.css">
+    <script>
+        (function () {
+            function setAppHeight() {
+                var height = window.innerHeight;
+                document.documentElement.style.setProperty('--app-height', height + 'px');
+            }
+            setAppHeight();
+            window.addEventListener('resize', setAppHeight, { passive: true });
+            window.addEventListener('orientationchange', setAppHeight, { passive: true });
+            document.addEventListener('visibilitychange', setAppHeight, { passive: true });
+        })();
+    </script>
 </head>
 
 <body>
@@ -15,19 +29,14 @@
                 onkeypress="handleAddProfileKeypress(event)">
             <button class="add-profile-btn" onclick="addProfileFromInput()" id="addProfileBtn">+</button>
         </div>
+        <div class="player-status-bar" id="playerStatusBar">
+            <span class="player-status-label">Active Player:</span>
+            <span id="activePlayer">None</span>
+        </div>
         <div class="stream-status-bar inactive" id="streamStatusBar">
             <span id="streamStatus">Disconnected</span>
             <button class="reconnect-btn" onclick="manualReconnect()" id="reconnectBtn"
                 style="display: inline-block;">Reconnect</button>
-        </div>
-        <div class="active-player-display">
-            <span class="active-player-label">Active Player:</span>
-            <span class="active-player-value" id="activePlayer">None</span>
-        </div>
-        <div class="change-player-input">
-            <input type="text" id="newPlayerNameInput" placeholder="Enter player name..."
-                onkeypress="handleChangePlayerKeypress(event)">
-            <button class="change-player-btn" onclick="changePlayerFromInput()" id="changePlayerBtn">Switch</button>
         </div>
     </div>
 

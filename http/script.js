@@ -198,6 +198,14 @@ function manualReconnect() {
 // Initialize the WebSocket connection
 connectWebSocket();
 
+// Prevent double-tap zoom on buttons (iOS Safari and some Android browsers)
+document.addEventListener('dblclick', function (e) {
+    const target = e.target;
+    if (target && (target.tagName === 'BUTTON' || target.closest('button'))) {
+        e.preventDefault();
+    }
+}, { passive: false });
+
 function addMessage(sender, message, type) {
     // Only show messages in debug mode
     if (window.DEBUG_MODE && messagesDiv) {
@@ -238,19 +246,29 @@ function updateProfilesList() {
         `;
 
         // Add click event to change profile (but not on delete button)
-        div.addEventListener('click', (e) => {
-            if (e.target.classList.contains('delete-btn')) {
-                return; // Don't change profile when clicking delete
-            }
+        const maybeChangeProfile = (e) => {
+            const isDelete = e.target && (e.target.classList && e.target.classList.contains('delete-btn')) || (e.target.closest && e.target.closest('.delete-btn'));
+            if (isDelete) return;
             if (name !== currentProfiles.current_profile) {
-                const command = {
-                    ChangeProfile: {
-                        name: name
-                    }
-                };
+                const command = { ChangeProfile: { name } };
                 sendCommand(command);
             }
+        };
+
+        div.addEventListener('click', (e) => {
+            maybeChangeProfile(e);
         });
+
+        // On touch devices, prevent the first tap from only triggering hover; act immediately
+        div.addEventListener('touchend', (e) => {
+            const isDelete = e.target && (e.target.classList && e.target.classList.contains('delete-btn')) || (e.target.closest && e.target.closest('.delete-btn'));
+            if (isDelete) {
+                // Allow default so the delete button's click fires
+                return;
+            }
+            e.preventDefault();
+            maybeChangeProfile(e);
+        }, { passive: false });
 
         profilesList.appendChild(div);
     });
