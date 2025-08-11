@@ -5,7 +5,7 @@ use std::sync::Arc;
 use tokio::sync::Mutex;
 
 // Serial communication function
-// A minimal abstraction used by the app: only read/write/flush are required.
+// A minimal abstraction used by the app: only read/write are required.
 pub trait SensorPort: Send {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize>;
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize>;
@@ -32,6 +32,42 @@ impl SensorPort for SerialPortAdapter {
     }
 }
 
+// Maximum expected length of a single response line from the device.
+// "t 1000 1000 1000 1000\n" is 22 bytes.
+const MAX_LINE_CAPACITY: usize = 22;
+
+fn read_serial_line(
+    port: &mut dyn SensorPort,
+    timeout_error_message: &'static str,
+) -> Result<Vec<u8>, Box<dyn std::error::Error + Send + Sync>> {
+    let mut serial_buf: Vec<u8> = Vec::with_capacity(MAX_LINE_CAPACITY);
+    let mut chunk = vec![0u8; MAX_LINE_CAPACITY];
+
+    loop {
+        match port.read(&mut chunk) {
+            Ok(n) if n > 0 => {
+                serial_buf.extend_from_slice(&chunk[..n]);
+
+                if let Some(pos) = serial_buf.iter().position(|&b| b == b'\n') {
+                    serial_buf.truncate(pos + 1);
+                    break;
+                }
+            }
+            Ok(0) => continue,
+            Ok(_) => continue,
+            Err(ref e) if e.kind() == std::io::ErrorKind::TimedOut => {
+                if !serial_buf.is_empty() {
+                    break;
+                }
+                return Err(timeout_error_message.into());
+            }
+            Err(e) => return Err(Box::new(e)),
+        }
+    }
+
+    Ok(serial_buf)
+}
+
 pub async fn read_sensor_values(
     port: &Arc<Mutex<Box<dyn SensorPort>>>,
 ) -> Result<[i32; 4], Box<dyn std::error::Error + Send + Sync>> {
@@ -40,37 +76,8 @@ pub async fn read_sensor_values(
     let output = "v\n".as_bytes();
     port_guard.write(output)?;
 
-    // Read the response
-    let mut serial_buf: Vec<u8> = Vec::with_capacity(23); // Max response size
-    let mut buf = [0u8; 23];
-
-    loop {
-        match port_guard.read(&mut buf) {
-            Ok(n) if n > 0 => {
-                serial_buf.extend_from_slice(&buf[..n]);
-
-                // Check if we have a complete line
-                if let Some(pos) = serial_buf.iter().position(|&b| b == b'\n') {
-                    serial_buf.truncate(pos + 1);
-                    break;
-                }
-            }
-            Ok(0) => {
-                // No data read, continue immediately
-                continue;
-            }
-            Ok(_) => continue,
-            Err(ref e) if e.kind() == std::io::ErrorKind::TimedOut => {
-                // Timeout occurred, check if we have any data
-                if !serial_buf.is_empty() {
-                    // If we have partial data, break and use what we have
-                    break;
-                }
-                return Err("Timeout reading sensor values".into());
-            }
-            Err(e) => return Err(Box::new(e)),
-        }
-    }
+    // Read the response line
+    let serial_buf = read_serial_line(&mut **port_guard, "Timeout reading sensor values")?;
 
     // Parse the response: "v 1000 1000 1000 1000\n"
     let response_str = String::from_utf8_lossy(&serial_buf);
@@ -103,39 +110,10 @@ pub async fn set_threshold(
     let output = command.as_bytes();
     port_guard.write(output)?;
 
-    // Read the response
-    let mut serial_buf: Vec<u8> = Vec::with_capacity(25); // Max response size for "t 123 1000 1000 1000\n"
-    let mut buf = [0u8; 25];
+    // Read the response line
+    let serial_buf = read_serial_line(&mut **port_guard, "Timeout reading threshold response")?;
 
-    loop {
-        match port_guard.read(&mut buf) {
-            Ok(n) if n > 0 => {
-                serial_buf.extend_from_slice(&buf[..n]);
-
-                // Check if we have a complete line
-                if let Some(pos) = serial_buf.iter().position(|&b| b == b'\n') {
-                    serial_buf.truncate(pos + 1);
-                    break;
-                }
-            }
-            Ok(0) => {
-                // No data read, continue immediately
-                continue;
-            }
-            Ok(_) => continue,
-            Err(ref e) if e.kind() == std::io::ErrorKind::TimedOut => {
-                // Timeout occurred, check if we have any data
-                if !serial_buf.is_empty() {
-                    // If we have partial data, break and use what we have
-                    break;
-                }
-                return Err("Timeout reading threshold response".into());
-            }
-            Err(e) => return Err(Box::new(e)),
-        }
-    }
-
-    // Parse the response: "t 123 1000 1000 1000\n"
+    // Parse the response: "t 1000 1000 1000 1000\n"
     let response_str = String::from_utf8_lossy(&serial_buf);
     let parts: Vec<&str> = response_str.trim().split_whitespace().collect();
 
@@ -180,39 +158,10 @@ pub async fn get_current_thresholds_from_device(
     let command = "t\n".as_bytes();
     port_guard.write(command)?;
 
-    // Read the response
-    let mut serial_buf: Vec<u8> = Vec::with_capacity(25); // Max response size for "t 123 1000 1000 1000\n"
-    let mut buf = [0u8; 25];
+    // Read the response line
+    let serial_buf = read_serial_line(&mut **port_guard, "Timeout reading threshold values")?;
 
-    loop {
-        match port_guard.read(&mut buf) {
-            Ok(n) if n > 0 => {
-                serial_buf.extend_from_slice(&buf[..n]);
-
-                // Check if we have a complete line
-                if let Some(pos) = serial_buf.iter().position(|&b| b == b'\n') {
-                    serial_buf.truncate(pos + 1);
-                    break;
-                }
-            }
-            Ok(0) => {
-                // No data read, continue immediately
-                continue;
-            }
-            Ok(_) => continue,
-            Err(ref e) if e.kind() == std::io::ErrorKind::TimedOut => {
-                // Timeout occurred, check if we have any data
-                if !serial_buf.is_empty() {
-                    // If we have partial data, break and use what we have
-                    break;
-                }
-                return Err("Timeout reading threshold values".into());
-            }
-            Err(e) => return Err(Box::new(e)),
-        }
-    }
-
-    // Parse the response: "t 123 1000 1000 1000\n"
+    // Parse the response: "t 1000 1000 1000 1000\n"
     let response_str = String::from_utf8_lossy(&serial_buf);
     let parts: Vec<&str> = response_str.trim().split_whitespace().collect();
 
