@@ -1,14 +1,12 @@
 ---@type WebSocket?
 local ws = nil
 
----@param s string
+---@param data table
 ---@return nil
-local function parseMessage(s)
+local function parseMessage(data)
 	if not ws then
 		return
 	end
-
-	local data = JsonDecode(s)
 
 	if data.response_type == "active_player_broadcast" then
 		local activePlayer = data.data.current_player
@@ -33,7 +31,17 @@ t.ScreenSelectMusic = Def.ActorFrame {
 			onMessage = function(msg)
 				local msgType = ToEnumShortString(msg.type)
 				if msgType == "Message" then
-					parseMessage(msg.data)
+					local data = JsonDecode(msg.data)
+					-- If we receive a message that is not active_player_broadcast, unsubscribe from that type
+					-- We always unsubscribe (even if already done) in case the server was restarted
+					if data.response_type and data.response_type ~= "active_player_broadcast" then
+						local unsubscribeCommand = {}
+						unsubscribeCommand["Unsubscribe"] = { event_types = { data.response_type } }
+						if ws ~= nil then
+							ws:Send(JsonEncode(unsubscribeCommand))
+						end
+					end
+					parseMessage(data)
 				end
 			end,
 		}
