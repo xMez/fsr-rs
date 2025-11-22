@@ -573,3 +573,56 @@ body.debug-mode #messages {
         opacity: 1;
     }
 }
+
+.subscription-controls {
+    padding: 15px 20px;
+    background: white;
+    border-top: 1px solid #ddd;
+    border-bottom: 1px solid #ddd;
+    margin-top: 10px;
+}
+
+.subscription-controls h3 {
+    margin: 0 0 10px 0;
+    font-size: 14px;
+    font-weight: bold;
+    color: #333;
+}
+
+.subscription-buttons {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.subscription-btn {
+    background: #f0f0f0;
+    color: #333;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    padding: 8px 12px;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    text-align: left;
+    touch-action: manipulation;
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.subscription-btn:hover {
+    background: #e8e8e8;
+    border-color: #bbb;
+}
+
+.subscription-btn.active {
+    background: #007acc;
+    color: white;
+    border-color: #0056b3;
+}
+
+.subscription-btn.active:hover {
+    background: #0056b3;
+    border-color: #004085;
+}

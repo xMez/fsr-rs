@@ -8,6 +8,8 @@ let maxReconnectAttempts = 10;
 let reconnectDelay = 1000; // Start with 1 second
 let reconnectTimeout = null;
 let isReconnecting = false;
+// Track current subscriptions (default: all event types for backward compatibility)
+let currentSubscriptions = new Set(['command_response', 'sensor_stream', 'active_player_broadcast']);
 
 function connectWebSocket() {
     if (isReconnecting) {
@@ -46,6 +48,18 @@ function setupWebSocketHandlers() {
         document.getElementById('reconnectBtn').style.display = 'none';
 
         setupThresholdBars();
+
+        // Explicitly subscribe to all event types (server defaults to all, but this ensures sync)
+        const subscribeCommand = {
+            Subscribe: {
+                event_types: ['command_response', 'sensor_stream', 'active_player_broadcast']
+            }
+        };
+        ws.send(JSON.stringify(subscribeCommand));
+        addMessage('System', 'Synced subscriptions: command_response, sensor_stream, active_player_broadcast', 'success');
+
+        // Update subscription button states (if in debug mode)
+        updateSubscriptionButtons();
 
         // Process any queued messages
         processQueuedMessages();
@@ -103,6 +117,19 @@ function setupWebSocketHandlers() {
         if (response.response_type === 'active_player_broadcast') {
             // Update the active player display without logging every broadcast
             updateActivePlayerDisplay(response.data);
+        }
+
+        // Handle subscription confirmations
+        if (response.message && response.message.includes('Subscribed to:')) {
+            // Extract event types from message and update UI
+            const eventTypes = response.message.split('Subscribed to:')[1].trim().split(', ');
+            eventTypes.forEach(type => currentSubscriptions.add(type.trim()));
+            updateSubscriptionButtons();
+        } else if (response.message && response.message.includes('Unsubscribed from:')) {
+            // Extract event types from message and update UI
+            const eventTypes = response.message.split('Unsubscribed from:')[1].trim().split(', ');
+            eventTypes.forEach(type => currentSubscriptions.delete(type.trim()));
+            updateSubscriptionButtons();
         }
     };
 
@@ -572,4 +599,66 @@ function handleChangePlayerKeypress(event) {
     if (event.key === 'Enter') {
         changePlayerFromInput();
     }
+}
+
+// Subscription management functions
+function toggleSubscription(eventType) {
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
+        addMessage('System', 'Cannot toggle subscription: WebSocket not connected', 'error');
+        return;
+    }
+
+    const isSubscribed = currentSubscriptions.has(eventType);
+
+    if (isSubscribed) {
+        // Unsubscribe
+        const command = {
+            Unsubscribe: {
+                event_types: [eventType]
+            }
+        };
+        ws.send(JSON.stringify(command));
+        currentSubscriptions.delete(eventType);
+        addMessage('System', `Unsubscribing from: ${eventType}`, 'success');
+    } else {
+        // Subscribe
+        const command = {
+            Subscribe: {
+                event_types: [eventType]
+            }
+        };
+        ws.send(JSON.stringify(command));
+        currentSubscriptions.add(eventType);
+        addMessage('System', `Subscribing to: ${eventType}`, 'success');
+    }
+
+    updateSubscriptionButtons();
+}
+
+function updateSubscriptionButtons() {
+    // Only update if we're in debug mode (subscription controls exist)
+    if (!window.DEBUG_MODE) {
+        return;
+    }
+
+    // Map event types to button IDs and display names
+    const buttonMap = {
+        'command_response': { id: 'subCommandResponse', name: 'Command Response' },
+        'sensor_stream': { id: 'subSensorStream', name: 'Sensor Stream' },
+        'active_player_broadcast': { id: 'subActivePlayer', name: 'Active Player' }
+    };
+
+    // Update button states
+    Object.entries(buttonMap).forEach(([eventType, config]) => {
+        const button = document.getElementById(config.id);
+        if (button) {
+            if (currentSubscriptions.has(eventType)) {
+                button.classList.add('active');
+                button.textContent = config.name;
+            } else {
+                button.classList.remove('active');
+                button.textContent = config.name + ' (off)';
+            }
+        }
+    });
 } 

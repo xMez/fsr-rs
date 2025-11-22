@@ -49,6 +49,12 @@ pub enum Command {
     GetSensorValues, // Kept for backward compatibility
     StartSensorStream,
     StopSensorStream,
+    Subscribe {
+        event_types: Vec<String>,
+    },
+    Unsubscribe {
+        event_types: Vec<String>,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]

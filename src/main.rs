@@ -15,6 +15,7 @@ use serial::{
     DummySerialPort, MockSerialPort, SensorPort, SerialPortAdapter,
 };
 
+use std::collections::HashSet;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
@@ -538,6 +539,11 @@ async fn handle_command(
                 response_type: Some("command_response".to_string()),
             }
         }
+        Command::Subscribe { .. } | Command::Unsubscribe { .. } => {
+            // These are handled in the WebSocket handler before reaching here
+            // This case should never be reached, but required for exhaustiveness
+            unreachable!("Subscribe/Unsubscribe should be handled in WebSocket handler")
+        }
     }
 }
 
@@ -730,11 +736,19 @@ async fn handle_socket(
     let (mut sender, mut receiver) = socket.split();
     let mut rx = tx.subscribe();
 
+    // Track subscriptions for this client (default: subscribe to all event types for backward compatibility)
+    let subscriptions = Arc::new(RwLock::new(HashSet::from([
+        "command_response".to_string(),
+        "sensor_stream".to_string(),
+        "active_player_broadcast".to_string(),
+    ])));
+
     // Send initial profiles state
     let initial_profiles = profiles.read().await.clone();
     let initial_response = Response {
         success: true,
-        message: "Connected to profile manager".to_string(),
+        message: "Connected to profile manager. Subscribed to all events by default. Use Subscribe/Unsubscribe to customize."
+            .to_string(),
         data: Some(initial_profiles),
         sensor_values: None,
         response_type: Some("command_response".to_string()),
@@ -743,11 +757,18 @@ async fn handle_socket(
     let _ = sender.send(Message::Text(json)).await;
 
     // Spawn a task to forward messages from the broadcast channel to the WebSocket
+    // Only send messages if the client is subscribed to the event type
+    let subscriptions_clone = subscriptions.clone();
     let mut send_task = tokio::spawn(async move {
         while let Ok(msg) = rx.recv().await {
-            let json = serde_json::to_string(&msg).unwrap();
-            if sender.send(Message::Text(json)).await.is_err() {
-                break;
+            // Check if client is subscribed to this event type
+            let event_type = msg.response_type.as_deref().unwrap_or("unknown");
+            let subs = subscriptions_clone.read().await;
+            if subs.contains(event_type) {
+                let json = serde_json::to_string(&msg).unwrap();
+                if sender.send(Message::Text(json)).await.is_err() {
+                    break;
+                }
             }
         }
     });
@@ -756,18 +777,58 @@ async fn handle_socket(
     let profiles_clone = profiles.clone();
     let tx_clone = tx.clone();
     let stream_control_clone = stream_control.clone();
+    let subscriptions_for_recv = subscriptions.clone();
     let mut recv_task = tokio::spawn(async move {
         while let Some(Ok(Message::Text(text))) = receiver.next().await {
             if let Ok(command) = serde_json::from_str::<Command>(&text) {
-                let mut profiles_guard = profiles_clone.write().await;
-                let response = handle_command(
-                    command,
-                    &mut profiles_guard,
-                    &serial_port,
-                    &stream_control_clone,
-                )
-                .await;
-                let _ = tx_clone.send(response);
+                // Handle Subscribe/Unsubscribe commands locally
+                match &command {
+                    Command::Subscribe { event_types } => {
+                        let mut subs = subscriptions_for_recv.write().await;
+                        for event_type in event_types {
+                            subs.insert(event_type.clone());
+                        }
+                        // Send confirmation
+                        let response = Response {
+                            success: true,
+                            message: format!("Subscribed to: {}", event_types.join(", ")),
+                            data: None,
+                            sensor_values: None,
+                            response_type: Some("command_response".to_string()),
+                        };
+                        // Send through broadcast channel - will be received by clients subscribed to "command_response"
+                        let _ = tx_clone.send(response);
+                        continue;
+                    }
+                    Command::Unsubscribe { event_types } => {
+                        let mut subs = subscriptions_for_recv.write().await;
+                        for event_type in event_types {
+                            subs.remove(event_type);
+                        }
+                        // Send confirmation
+                        let response = Response {
+                            success: true,
+                            message: format!("Unsubscribed from: {}", event_types.join(", ")),
+                            data: None,
+                            sensor_values: None,
+                            response_type: Some("command_response".to_string()),
+                        };
+                        let _ = tx_clone.send(response);
+                        continue;
+                    }
+                    _ => {
+                        // Handle other commands normally
+                        let mut profiles_guard = profiles_clone.write().await;
+                        let response = handle_command(
+                            command,
+                            &mut profiles_guard,
+                            &serial_port,
+                            &stream_control_clone,
+                        )
+                        .await;
+                        let _ = tx_clone.send(response);
+                    }
+                }
             }
         }
     });
