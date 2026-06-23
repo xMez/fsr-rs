@@ -17,8 +17,11 @@ pub struct Player {
 pub struct Profiles {
     pub profiles: HashMap<String, Profile>,
     pub current_profile: String,
-    pub default_profile: String, // New field for default profile
+    #[serde(default)]
+    pub default_profile: String,
+    #[serde(default)]
     pub players: HashMap<String, Player>,
+    #[serde(default)]
     pub current_player: String,
 }
 
@@ -64,13 +67,29 @@ pub const PROFILES_FILE: &str = "profiles.json";
 
 pub async fn load_profiles() -> Profiles {
     match fs::read_to_string(PROFILES_FILE) {
-        Ok(content) => serde_json::from_str(&content).unwrap_or_else(|_| Profiles {
-            profiles: HashMap::new(),
-            current_profile: String::new(),
-            default_profile: String::new(),
-            players: HashMap::new(),
-            current_player: String::new(),
-        }),
+        Ok(content) => match serde_json::from_str(&content) {
+            Ok(profiles) => profiles,
+            Err(e) => {
+                eprintln!(
+                    "Warning: Failed to parse {}: {}. Returning empty profiles.",
+                    PROFILES_FILE, e
+                );
+                // Back up the corrupted/unparseable file so the user can recover data
+                let backup_path = format!("{}.backup", PROFILES_FILE);
+                if let Err(backup_err) = fs::copy(PROFILES_FILE, &backup_path) {
+                    eprintln!("Warning: Failed to create backup at {}: {}", backup_path, backup_err);
+                } else {
+                    eprintln!("A backup has been saved to {}", backup_path);
+                }
+                Profiles {
+                    profiles: HashMap::new(),
+                    current_profile: String::new(),
+                    default_profile: String::new(),
+                    players: HashMap::new(),
+                    current_player: String::new(),
+                }
+            }
+        },
         Err(_) => Profiles {
             profiles: HashMap::new(),
             current_profile: String::new(),
@@ -85,7 +104,10 @@ pub async fn save_profiles(
     profiles: &Profiles,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let json = serde_json::to_string_pretty(profiles)?;
-    fs::write(PROFILES_FILE, json)?;
+    // Atomic save: write to temp file then rename to avoid corruption on crash
+    let tmp_path = format!("{}.tmp", PROFILES_FILE);
+    fs::write(&tmp_path, &json)?;
+    fs::rename(&tmp_path, PROFILES_FILE)?;
     Ok(())
 }
 
