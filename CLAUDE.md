@@ -14,7 +14,8 @@ cargo run               # Run with defaults (COM6, port 3000, localhost)
 cargo run -- --com-port COM3 --port 8080 --host 0.0.0.0  # Custom config
 cargo run -- --mock-serial  # Use mock device (no hardware required)
 cargo test              # Run all tests (~40 total)
-cargo build --release   # Creates release zip with executable + http/ + lua/
+cargo build --release   # Release build
+./scripts/release.sh    # Build + package zip with executable + http/ + lua/
 ```
 
 ## Architecture

@@ -73,8 +73,14 @@ cargo run
 
 ### Release Build
 ```bash
-# Build in release mode (includes HTTP files and creates zip)
+# Build in release mode
 cargo build --release
+
+# Or build and package into a zip (Linux/macOS)
+./scripts/release.sh
+
+# On Windows (PowerShell)
+.\scripts\release.ps1
 
 # Run the release binary
 ./target/release/fsr-rs --com-port COM3 --port 8080
@@ -83,18 +89,15 @@ cargo build --release
 ### File Structure After Release Build
 ```
 target/release/
-├── fsr-rs.exe          # Main executable
-├── fsr-rs-0.1.0.zip    # Release package (executable + HTTP files)
-├── http/               # Web interface files
-│   ├── index.html
-│   ├── script.js
-│   └── style.css
-└── profiles.json       # User profiles (created on first run)
+├── fsr-rs(.exe)        # Main executable
+├── fsr-rs-0.4.0.zip    # Release package (executable + http/ + lua/)
+└── ...
 ```
 
 ### Distribution
 The generated zip file (`fsr-rs-{version}.zip`) contains everything needed to run the application:
-- `fsr-rs.exe` - The main executable
+- `fsr-rs` (or `fsr-rs.exe`) - The main executable
 - `http/` directory - All web interface files
+- `lua/` directory - Scripting files for external integrations
 
-Users can extract the zip file and run `fsr-rs.exe` from any location - the application will automatically find the HTTP files relative to the executable's location. 
+Users can extract the zip file and run the executable from any location - the application will automatically find the HTTP files relative to the executable's location. 
